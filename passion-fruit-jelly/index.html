@@ -42,10 +42,17 @@
   .readout { z-index: 1; position: fixed; left: 40px; bottom: 32px; pointer-events: none; color: var(--mute); line-height: 1.6; }
   .readout b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
   @media (max-width: 720px) {
-    .title { left: 20px; top: 20px; }
-    .title h1 { font-size: 44px; }
-    .title p { display: none; }
-    .panel { right: 12px; left: 12px; top: auto; bottom: 12px; width: auto; }
+    .title { left: 16px; top: calc(16px + env(safe-area-inset-top, 0px)); }
+    .title h1 { font-size: 40px; margin: 8px 0 0; }
+    .title p, .title small { display: none; }
+    .panel { right: 12px; left: 12px; top: auto; width: auto; padding: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; }
+    .panel h2 { display: none; }
+    .panel .seg, .panel .actions, .panel .checks { grid-column: 1 / -1; }
+    .seg { margin-bottom: 4px; }
+    label.row { margin-top: 6px; }
+    .actions { margin-top: 10px; }
+    .checks { flex-direction: row; gap: 18px; margin-top: 10px; }
     .readout { display: none; }
   }
 </style>
@@ -470,10 +477,18 @@ document.getElementById('nudge').onclick = nudge;
 document.getElementById('reset').onclick = resetBody;
 document.getElementById('mesh').onchange = e => { wire.visible = e.target.checked; };
 document.getElementById('pause').onchange = e => { params.paused = e.target.checked; };
-addEventListener('resize', () => {
+function layout() {
+  const narrow = innerWidth < 720;
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
-});
+  if (narrow !== layout.narrow) {
+    layout.narrow = narrow;
+    camera.position.set(0, narrow ? 2.6 : 2.3, narrow ? 9.2 : 5.2);
+    controls.target.set(0, narrow ? -0.35 : 0.55, 0);
+  }
+}
+addEventListener('resize', layout);
+layout();
 
 /* ---------- loop ---------- */
 const wobEl = document.getElementById('wob'), hgtEl = document.getElementById('hgt');
