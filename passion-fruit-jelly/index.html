@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Jelly Studies</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Passion Fruit — soft-body study</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;1,400;1,500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -13,8 +13,6 @@
     --mute: #7c726a;
     --line: rgba(42, 35, 32, .14);
     --accent: #3b1233;
-    --accent-ink: #ffffff;
-    --panel: rgba(255, 255, 255, .55);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
@@ -24,26 +22,25 @@
   .title small { letter-spacing: .14em; text-transform: uppercase; font-size: 10px; color: var(--mute); }
   .title h1 { font: italic 400 64px/0.95 'Cormorant Garamond', Georgia, serif; margin: 14px 0 12px; }
   .title p { margin: 0; color: var(--mute); line-height: 1.55; }
-  .panel { z-index: 2; position: fixed; right: 28px; top: 28px; width: 244px; padding: 16px; border: 1px solid var(--line);
-    border-radius: 10px; background: var(--panel); backdrop-filter: blur(10px); }
-  .panel h2 { margin: 0 0 8px; font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
-  .seg { display: flex; gap: 6px; margin-bottom: 14px; }
+  .panel { z-index: 2; position: fixed; right: 28px; top: 28px; width: 232px; padding: 16px; border: 1px solid var(--line);
+    border-radius: 10px; background: rgba(255, 255, 255, .55); backdrop-filter: blur(10px); }
+  .panel h2 { margin: 0 0 10px; font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+  .seg { display: flex; gap: 6px; margin-bottom: 16px; }
   .seg button { flex: 1; padding: 7px 0; border: 1px solid var(--line); border-radius: 6px; background: transparent;
     font: inherit; color: var(--ink); cursor: pointer; }
-  .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   label.row { display: flex; justify-content: space-between; margin: 12px 0 4px; }
   label.row span:last-child { color: var(--mute); font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
   .actions { display: flex; gap: 6px; margin-top: 16px; }
   .actions button { flex: 1; padding: 9px 0; border-radius: 6px; border: 1px solid var(--accent); font: inherit; cursor: pointer; }
-  .actions .primary { background: var(--accent); color: var(--accent-ink); flex: 2; }
+  .actions .primary { background: var(--accent); color: #fff; flex: 2; }
   .actions .ghost { background: transparent; color: var(--accent); }
   .checks { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; color: var(--mute); }
   .checks label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
   .checks input { accent-color: var(--accent); }
   .readout { z-index: 1; position: fixed; left: 40px; bottom: 32px; pointer-events: none; color: var(--mute); line-height: 1.6; }
   .readout b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
-  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   @media (max-width: 720px) {
     .title { left: 16px; top: calc(16px + env(safe-area-inset-top, 0px)); }
     .title h1 { font-size: 40px; margin: 8px 0 0; }
@@ -52,7 +49,7 @@
       bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; }
     .panel h2 { display: none; }
     .panel .seg, .panel .actions, .panel .checks { grid-column: 1 / -1; }
-    .seg { margin-bottom: 6px; }
+    .seg { margin-bottom: 4px; }
     label.row { margin-top: 6px; }
     .actions { margin-top: 10px; }
     .checks { flex-direction: row; gap: 18px; margin-top: 10px; }
@@ -69,13 +66,11 @@
 <body>
 <div class="title">
   <small>Material studies · soft body</small>
-  <h1 id="ttl"></h1>
-  <p id="blurb"></p>
+  <h1>Passion<br>Fruit.</h1>
+  <p>A mass-spring jelly in three.js, no physics engine. Drag to orbit, click the pulp to poke it, or give it a nudge.</p>
 </div>
 
 <div class="panel">
-  <h2>Model</h2>
-  <div class="seg" id="models"></div>
   <h2>Variety</h2>
   <div class="seg" id="variety"></div>
   <label class="row"><span>Firmness</span><span id="kv"></span></label>
@@ -102,62 +97,21 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
+/* ---------- geometry constants ---------- */
+const R = 1, DEPTH = 0.9, WALL = 0.14;
+const RI = R - WALL;          // cavity radius
+const RP = RI - 0.004;        // pulp radius
+const REST_Y = DEPTH * R;     // group origin height when resting on the ground
 const NR = 28, NS = 64;       // pulp grid: rings x segments
 const G = 9.8;
 
-/* ---------- model definitions ---------- */
-// Every model is: a lathe shell + a soft-body "filling" surface + decorations that ride on the filling.
-const MODELS = {
-  passion: {
-    label: 'Passion fruit', title: 'Passion<br>Fruit.',
-    blurb: 'A mass-spring jelly in three.js, no physics engine. Drag to orbit, click the pulp to poke it, or give it a nudge.',
-    R: 1, DEPTH: .9, WALL: .16, rimJag: 0, base: -.03, dome: .12,
-    bump: .04, bumpFreq: 2.6, tone: 'noise',
-    k: 220, c: 2.5, squish: .3,
-    shellMat: { roughness: .34, clearcoat: .7, cr: .4 },
-    pulpMat: { roughness: .1, clearcoat: 1, cr: .06, map: true, repeat: 2, bump: 5 },
-    decor: { kind: 'seed', n: 170, minD: .068, scale: [.03, .009, .018], sac: [.05, .02, .04] },
-    varieties: {
-      Purple: { shell: '#5a2250', pith: '#f1e6cf', pulp: '#f2a31c', decor: '#241710', sac: '#ff9d1a' },
-      Golden: { shell: '#e2b52a', pith: '#f7efd6', pulp: '#f7c04a', decor: '#2b1d12', sac: '#ffc83a' },
-      Sweet:  { shell: '#e57f1f', pith: '#f4ead2', pulp: '#d9d3b4', decor: '#2a2a22', sac: '#e9e3c2' },
-    },
-  },
-  watermelon: {
-    label: 'Watermelon', title: 'Water-<br>melon.',
-    blurb: 'Thick striped rind over crisp flesh. Firmer than the jelly, so it shivers and settles quickly.',
-    R: 1.08, DEPTH: .92, WALL: .24, rimJag: 0, base: -.02, dome: .05,
-    bump: .012, bumpFreq: 1.6, tone: 'stripes',
-    k: 340, c: 4.2, squish: .26,
-    shellMat: { roughness: .3, clearcoat: .45, cr: .35 },
-    pulpMat: { roughness: .22, clearcoat: .8, cr: .15, map: true, repeat: 3.5, bump: 2.2 },
-    decor: { kind: 'seed', n: 34, minD: .15, scale: [.05, .012, .024] },
-    varieties: {
-      Red:    { shell: '#143f1c', shell2: '#63a53f', pith: '#e8f1d4', pulp: '#e9384c', decor: '#120d0b' },
-      Yellow: { shell: '#143f1c', shell2: '#63a53f', pith: '#eef2d2', pulp: '#f3c52f', decor: '#120d0b' },
-      Pink:   { shell: '#1b4d26', shell2: '#7fb64f', pith: '#eef5da', pulp: '#f27b97', decor: '#16100d' },
-    },
-  },
-  chocolate: {
-    label: 'Chocolate shell', title: 'Chocolate<br>Shell.',
-    blurb: 'A chipped dark-chocolate shell over soft custard. Heavy, slow wobble; poke the middle and watch it roll.',
-    R: 1, DEPTH: .86, WALL: .22, rimJag: .1, base: -.07, dome: .1,
-    bump: .01, bumpFreq: 2.2, tone: 'noise',
-    k: 120, c: 1.6, squish: .42,
-    shellMat: { roughness: .2, clearcoat: 1, cr: .12 },
-    pulpMat: { roughness: .16, clearcoat: .9, cr: .1, map: false, repeat: 1, bump: 0 },
-    decor: { kind: 'shard', n: 13, minD: .3, scale: [.15, .028, .1] },
-    varieties: {
-      Custard:    { shell: '#2b130b', pith: '#4d2818', pulp: '#f2dca4', decor: '#35190d' },
-      Strawberry: { shell: '#2b130b', pith: '#4d2818', pulp: '#e8728c', decor: '#35190d' },
-      Matcha:     { shell: '#2b130b', pith: '#4d2818', pulp: '#a2c466', decor: '#35190d' },
-    },
-  },
+const VARIETIES = {
+  Purple: { shell: '#5a2250', pith: '#f1e6cf', pulp: '#f2a31c', seed: '#241710' },
+  Golden: { shell: '#e2b52a', pith: '#f7efd6', pulp: '#f7c04a', seed: '#2b1d12' },
+  Sweet:  { shell: '#e57f1f', pith: '#f4ead2', pulp: '#d9d3b4', seed: '#2a2a22' },
 };
 
 const params = { k: 220, c: 2.5, paused: false };
-let M, R, DEPTH, WALL, RI, RP, REST_Y, SQUISH;
-let modelKey = 'passion', varietyName = 'Purple';
 
 /* ---------- noise ---------- */
 function hash(x, y, z) {
@@ -176,7 +130,6 @@ function noise3(x, y, z) {
     fz);
 }
 const fbm = (x, y, z) => noise3(x, y, z) * .6 + noise3(x * 2.3, y * 2.3, z * 2.3) * .3 + noise3(x * 5.1, y * 5.1, z * 5.1) * .1;
-const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /* ---------- renderer / scene ---------- */
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -195,11 +148,13 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.7;
 
 const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.1, 50);
+camera.position.set(0, 2.3, 5.2);
 const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.55, 0);
 controls.enableDamping = true;
 controls.enablePan = false;
 controls.minDistance = 2.6;
-controls.maxDistance = 11;
+controls.maxDistance = 9;
 controls.maxPolarAngle = Math.PI * 0.49;
 
 const sun = new THREE.DirectionalLight('#fff4e6', 2.2);
@@ -218,97 +173,13 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
+/* ---------- shell (lathe, vertex-coloured) ---------- */
 const fruit = new THREE.Group();
 scene.add(fruit);
 
-/* ---------- soft-body topology (shared by every model) ---------- */
-const nV = 1 + NR * NS;
-const rest = new Float32Array(nV * 3);
-const dsp = new Float32Array(nV * 3);   // displacement from rest
-const vel = new Float32Array(nV * 3);
-const acc = new Float32Array(nV * 3);
-const ringOf = new Uint8Array(nV);
-const uv = new Float32Array(nV * 2);
-const vid = (j, k) => j === 0 ? 0 : 1 + (j - 1) * NS + ((k % NS) + NS) % NS;
-const pulpY = r => M.base + M.dome * (1 - (r / RP) ** 2);
-
-uv.set([.5, .5], 0);
-for (let j = 1; j <= NR; j++) for (let k = 0; k < NS; k++) {
-  const i = vid(j, k), th = k / NS * Math.PI * 2, f = j / NR;
-  uv.set([.5 + .5 * f * Math.cos(th), .5 + .5 * f * Math.sin(th)], i * 2);
-  ringOf[i] = j;
-}
-const index = [];
-for (let k = 0; k < NS; k++) index.push(0, vid(1, k + 1), vid(1, k));
-for (let j = 1; j < NR; j++) for (let k = 0; k < NS; k++) {
-  const a0 = vid(j, k), a1 = vid(j, k + 1), b0 = vid(j + 1, k), b1 = vid(j + 1, k + 1);
-  index.push(a0, a1, b0, a1, b1, b0);
-}
-const nbStart = new Uint32Array(nV + 1), nbFlat = [];
-for (let i = 0; i < nV; i++) {
-  nbStart[i] = nbFlat.length;
-  if (i === 0) { for (let k = 0; k < NS; k++) nbFlat.push(vid(1, k)); continue; }
-  const j = ringOf[i], k = (i - 1) % NS;
-  nbFlat.push(vid(j, k - 1), vid(j, k + 1), j > 1 ? vid(j - 1, k) : 0);
-  if (j < NR) nbFlat.push(vid(j + 1, k));
-}
-nbStart[nV] = nbFlat.length;
-const nbrs = Uint32Array.from(nbFlat);
-
-function layoutPulp() {
-  rest.set([0, pulpY(0), 0], 0);
-  for (let j = 1; j <= NR; j++) {
-    const r = RP * j / NR;
-    for (let k = 0; k < NS; k++) {
-      const th = k / NS * Math.PI * 2;
-      rest.set([r * Math.cos(th), pulpY(r), r * Math.sin(th)], vid(j, k) * 3);
-    }
-  }
-}
-
-const pulpGeo = new THREE.BufferGeometry();
-const pulpPos = new THREE.BufferAttribute(new Float32Array(nV * 3), 3);
-pulpPos.setUsage(THREE.DynamicDrawUsage);
-pulpGeo.setAttribute('position', pulpPos);
-pulpGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-pulpGeo.setIndex(index);
-
-function sacTexture() {
-  const s = 512, cv = document.createElement('canvas');
-  cv.width = cv.height = s;
-  const g = cv.getContext('2d');
-  g.fillStyle = '#9a9a9a'; g.fillRect(0, 0, s, s);
-  for (let i = 0; i < 1800; i++) {
-    const x = Math.random() * s, y = Math.random() * s, r = 5 + Math.random() * 10;
-    const l = 140 + (Math.random() * 115 | 0);
-    const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, `rgb(${l},${l},${l})`); gr.addColorStop(1, 'rgba(110,110,110,0)');
-    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-  }
-  const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
-  return t;
-}
-const sac = sacTexture();
-const pulpMat = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide });
-const pulp = new THREE.Mesh(pulpGeo, pulpMat);
-pulp.castShadow = true;
-fruit.add(pulp);
-
-const wire = new THREE.Mesh(pulpGeo, new THREE.MeshBasicMaterial({
-  color: '#1d120f', wireframe: true, transparent: true, opacity: 0.45,
-  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-}));
-wire.visible = false;
-fruit.add(wire);
-
-/* ---------- per-model: shell ---------- */
-const shellMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, side: THREE.DoubleSide });
-let shell = null, shellTone = null, shellIsOuter = null;
-
-function buildShell() {
+const shellVar = [];       // per-vertex colour variation
+let shellGeo, shellIsOuter;
+{
   const pts = [], N = 40;
   for (let i = 0; i <= N; i++) {
     const a = i / N * Math.PI / 2;
@@ -321,35 +192,24 @@ function buildShell() {
     pts.push(new THREE.Vector2(Math.max(RI * Math.sin(a), 1e-4), -DEPTH * RI * Math.cos(a)));
   }
   const SEG = 96, np = pts.length;
-  const geo = new THREE.LatheGeometry(pts, SEG);
-  const pos = geo.attributes.position;
+  shellGeo = new THREE.LatheGeometry(pts, SEG);
+  const pos = shellGeo.attributes.position;
   shellIsOuter = new Uint8Array(pos.count);
-  shellTone = new Float32Array(pos.count);
   for (let i = 0; i < pos.count; i++) {
-    const j = i % np, outer = j < nOuter;
+    const outer = (i % np) < nOuter;
     shellIsOuter[i] = outer ? 1 : 0;
-    let x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const n = fbm(x * 3.2 + 7, y * 3.2, z * 3.2);
+    shellVar.push(0.82 + 0.36 * fbm(x * 1.6, y * 1.6 + 3, z * 1.6));
     if (outer) {
-      const n = fbm(x * M.bumpFreq + 7, y * M.bumpFreq, z * M.bumpFreq);
       const len = Math.hypot(x, y + 0.1, z) || 1;
-      const d = M.bump * (n - 0.5) * 2;
-      const ang = Math.atan2(z, x);
-      if (M.tone === 'stripes') {
-        const v = Math.sin(ang * 9 + 2.4 * fbm(x * 1.4, y * 2.2 + 5, z * 1.4)) + 0.7 * (noise3(x * 2, y * 2, z * 2) - 0.5);
-        shellTone[i] = smooth(-.15, .25, v);
-      } else {
-        shellTone[i] = 0.82 + 0.36 * fbm(x * 1.6, y * 1.6 + 3, z * 1.6);
-      }
-      x += x / len * d; y += (y + 0.1) / len * d; z += z / len * d;
-      if (j === nOuter - 1) y += M.rimJag * noise3(x * 2.6 + 3, 0, z * 2.6);
-    } else {
-      shellTone[i] = 1;
-      if (M.rimJag && (j === nOuter || j === nOuter + 1)) y += M.rimJag * noise3(x * 2.6 + 3, 0, z * 2.6);
+      const d = 0.035 * (n - 0.5) + 0.012 * Math.sin(y * 40) * (noise3(x * 6, y * 6, z * 6) - 0.4);
+      pos.setXYZ(i, x + x / len * d, y + (y + 0.1) / len * d, z + z / len * d);
     }
-    pos.setXYZ(i, x, y, z);
   }
-  geo.computeVertexNormals();
-  const nrm = geo.attributes.normal;   // weld the lathe seam
+  shellGeo.computeVertexNormals();
+  // weld normals across the lathe seam
+  const nrm = shellGeo.attributes.normal;
   for (let j = 0; j < np; j++) {
     const a = j, b = SEG * np + j;
     const nx = nrm.getX(a) + nrm.getX(b), ny = nrm.getY(a) + nrm.getY(b), nz = nrm.getZ(a) + nrm.getZ(b);
@@ -357,141 +217,159 @@ function buildShell() {
     nrm.setXYZ(a, nx / l, ny / l, nz / l);
     nrm.setXYZ(b, nx / l, ny / l, nz / l);
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3));
-  return geo;
+  shellGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3));
 }
+const shell = new THREE.Mesh(shellGeo, new THREE.MeshPhysicalMaterial({
+  vertexColors: true, roughness: 0.36, clearcoat: 0.7, clearcoatRoughness: 0.4, side: THREE.DoubleSide,
+}));
+shell.castShadow = true;
+fruit.add(shell);
 
-/* ---------- per-model: decorations riding on the filling ---------- */
-let decorMesh = null, sacMesh = null, decor = [];
-const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
-const sacScale = new THREE.Vector3();
+/* ---------- pulp: soft body ---------- */
+const nV = 1 + NR * NS;
+const rest = new Float32Array(nV * 3);
+const dsp = new Float32Array(nV * 3);   // displacement
+const vel = new Float32Array(nV * 3);
+const acc = new Float32Array(nV * 3);
+const ringOf = new Uint8Array(nV);
+const uv = new Float32Array(nV * 2);
+const pulpY = r => -0.03 + 0.11 * (1 - (r / RP) ** 2);
+const vid = (j, k) => j === 0 ? 0 : 1 + (j - 1) * NS + ((k % NS) + NS) % NS;
 
-function buildDecor() {
-  for (const m of [decorMesh, sacMesh]) if (m) { fruit.remove(m); m.geometry.dispose(); m.material.dispose(); }
-  decorMesh = sacMesh = null; decor = [];
-  const D = M.decor;
-  const geo = D.kind === 'seed' ? new THREE.SphereGeometry(1, 12, 9) : new THREE.BoxGeometry(1, 1, 1);
-  decorMesh = new THREE.InstancedMesh(geo, new THREE.MeshPhysicalMaterial(
-    D.kind === 'seed' ? { roughness: .5, clearcoat: .2 } : { roughness: .2, clearcoat: 1, clearcoatRoughness: .1 }), D.n);
-  decorMesh.castShadow = D.kind === 'shard';
-  fruit.add(decorMesh);
-  if (D.sac) {
-    sacMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshPhysicalMaterial({
-      roughness: .05, clearcoat: 1, clearcoatRoughness: .03, transparent: true, opacity: .4, depthWrite: false }), D.n);
-    sacScale.set(...D.sac);
-    fruit.add(sacMesh);
+rest.set([0, pulpY(0), 0], 0);
+uv.set([.5, .5], 0);
+for (let j = 1; j <= NR; j++) {
+  const r = RP * j / NR;
+  for (let k = 0; k < NS; k++) {
+    const i = vid(j, k), th = k / NS * Math.PI * 2;
+    rest.set([r * Math.cos(th), pulpY(r), r * Math.sin(th)], i * 3);
+    uv.set([.5 + .5 * r / RP * Math.cos(th), .5 + .5 * r / RP * Math.sin(th)], i * 2);
+    ringOf[i] = j;
   }
+}
+const index = [];
+for (let k = 0; k < NS; k++) index.push(0, vid(1, k + 1), vid(1, k));
+for (let j = 1; j < NR; j++) for (let k = 0; k < NS; k++) {
+  const a0 = vid(j, k), a1 = vid(j, k + 1), b0 = vid(j + 1, k), b1 = vid(j + 1, k + 1);
+  index.push(a0, a1, b0, a1, b1, b0);
+}
+// neighbour lists
+const nbStart = new Uint32Array(nV + 1), nbFlat = [];
+for (let i = 0; i < nV; i++) {
+  nbStart[i] = nbFlat.length;
+  if (i === 0) { for (let k = 0; k < NS; k++) nbFlat.push(vid(1, k)); continue; }
+  const j = ringOf[i], k = (i - 1) % NS;
+  nbFlat.push(vid(j, k - 1), vid(j, k + 1), j > 1 ? vid(j - 1, k) : 0);
+  if (j < NR) nbFlat.push(vid(j + 1, k));
+}
+nbStart[nV] = nbFlat.length;
+const nbrs = Uint32Array.from(nbFlat);
+
+const pulpGeo = new THREE.BufferGeometry();
+const pulpPos = new THREE.BufferAttribute(new Float32Array(rest), 3);
+pulpPos.setUsage(THREE.DynamicDrawUsage);
+pulpGeo.setAttribute('position', pulpPos);
+pulpGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+pulpGeo.setIndex(index);
+pulpGeo.computeVertexNormals();
+
+function sacTexture() {
+  const s = 512, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#b4b4b4'; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 1800; i++) {
+    const x = Math.random() * s, y = Math.random() * s, r = 5 + Math.random() * 10;
+    const l = 150 + (Math.random() * 105 | 0);
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgb(${l},${l},${l})`); gr.addColorStop(1, 'rgba(120,120,120,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.repeat.set(2, 2);
+  t.anisotropy = 4;
+  return t;
+}
+const sac = sacTexture();
+const pulp = new THREE.Mesh(pulpGeo, new THREE.MeshPhysicalMaterial({
+  color: '#f2a31c', map: sac, bumpMap: sac, bumpScale: 3, roughness: 0.14,
+  clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide,
+}));
+pulp.castShadow = true;
+fruit.add(pulp);
+
+const wire = new THREE.Mesh(pulpGeo, new THREE.MeshBasicMaterial({
+  color: '#1d120f', wireframe: true, transparent: true, opacity: 0.45,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+}));
+wire.visible = false;
+fruit.add(wire);
+
+/* ---------- seeds, riding on the jelly ---------- */
+const SEEDS = 190;
+const seedMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 9),
+  new THREE.MeshPhysicalMaterial({ color: '#241710', roughness: 0.5, clearcoat: 0.2 }), SEEDS);
+fruit.add(seedMesh);
+const seeds = [];
+{
   const placed = [];
-  for (let t = 0; placed.length < D.n && t < 20000; t++) {
-    const r = RP * (D.kind === 'shard' ? .8 : .94) * Math.sqrt(Math.random()), th = Math.random() * Math.PI * 2;
+  let tries = 0;
+  while (placed.length < SEEDS && tries++ < 20000) {
+    const r = RP * 0.94 * Math.sqrt(Math.random()), th = Math.random() * Math.PI * 2;
     const x = r * Math.cos(th), z = r * Math.sin(th);
-    if (placed.some(p => (p[0] - x) ** 2 + (p[1] - z) ** 2 < D.minD ** 2)) continue;
+    if (placed.some(p => (p[0] - x) ** 2 + (p[1] - z) ** 2 < 0.0036)) continue;
     placed.push([x, z]);
   }
   for (const [x, z] of placed) {
+    const y = pulpY(Math.hypot(x, z)) + 0.012;
     let best = 1, bd = 1e9;
     for (let i = 1; i < nV; i++) {
       const d = (rest[i * 3] - x) ** 2 + (rest[i * 3 + 2] - z) ** 2;
       if (d < bd) { bd = d; best = i; }
     }
-    const tilt = D.kind === 'shard' ? .6 : .3, f = .8 + Math.random() * .5;
-    decor.push({
-      x, y: pulpY(Math.hypot(x, z)) + (D.kind === 'shard' ? .02 : .012), z, vi: best,
-      q: new THREE.Quaternion().setFromEuler(new THREE.Euler(
-        (Math.random() - .5) * tilt, Math.random() * Math.PI * 2, (Math.random() - .5) * tilt)),
-      f,
-      s: new THREE.Vector3(...D.scale).multiplyScalar(f),
-    });
+    seeds.push({ x, y, z, vi: best, q: new THREE.Quaternion().setFromEuler(
+      new THREE.Euler((Math.random() - .5) * .3, Math.random() * Math.PI * 2, (Math.random() - .5) * .3)),
+      s: new THREE.Vector3(0.03, 0.009, 0.018).multiplyScalar(0.8 + Math.random() * 0.5) });
   }
-  decorMesh.count = decor.length;
-  if (sacMesh) sacMesh.count = decor.length;
+}
+const _m = new THREE.Matrix4(), _p = new THREE.Vector3();
+function updateSeeds() {
+  for (let i = 0; i < seeds.length; i++) {
+    const s = seeds[i], o = s.vi * 3;
+    _p.set(s.x + dsp[o], s.y + dsp[o + 1], s.z + dsp[o + 2]);
+    _m.compose(_p, s.q, s.s);
+    seedMesh.setMatrixAt(i, _m);
+  }
+  seedMesh.instanceMatrix.needsUpdate = true;
 }
 
-function updateDecor() {
-  for (let i = 0; i < decor.length; i++) {
-    const d = decor[i], o = d.vi * 3;
-    _p.set(d.x + dsp[o], d.y + dsp[o + 1], d.z + dsp[o + 2]);
-    _m.compose(_p, d.q, d.s);
-    decorMesh.setMatrixAt(i, _m);
-    if (sacMesh) {
-      _s.copy(sacScale).multiplyScalar(d.f);
-      _m.compose(_p, d.q, _s);
-      sacMesh.setMatrixAt(i, _m);
-    }
-  }
-  decorMesh.instanceMatrix.needsUpdate = true;
-  if (sacMesh) sacMesh.instanceMatrix.needsUpdate = true;
-}
-
-/* ---------- colours ---------- */
-const _a = new THREE.Color(), _b = new THREE.Color(), _c = new THREE.Color();
-function applyVariety(name) {
-  varietyName = name;
-  const v = M.varieties[name];
-  const col = shell.geometry.attributes.color;
-  _a.set(v.shell); _b.set(v.shell2 || v.shell); _c.set(v.pith);
+/* ---------- variety ---------- */
+const _c = new THREE.Color(), _c2 = new THREE.Color();
+function setVariety(name) {
+  const v = VARIETIES[name];
+  const col = shellGeo.attributes.color;
+  _c.set(v.shell); _c2.set(v.pith);
   for (let i = 0; i < col.count; i++) {
-    const t = shellTone[i];
-    if (!shellIsOuter[i]) col.setXYZ(i, _c.r, _c.g, _c.b);
-    else if (v.shell2) col.setXYZ(i, _a.r + (_b.r - _a.r) * t, _a.g + (_b.g - _a.g) * t, _a.b + (_b.b - _a.b) * t);
-    else col.setXYZ(i, _a.r * t, _a.g * t, _a.b * t);
+    const t = shellIsOuter[i] ? shellVar[i] : 1;
+    const src = shellIsOuter[i] ? _c : _c2;
+    col.setXYZ(i, src.r * t, src.g * t, src.b * t);
   }
   col.needsUpdate = true;
-  pulpMat.color.set(v.pulp);
-  decorMesh.material.color.set(v.decor);
-  if (sacMesh) sacMesh.material.color.set(v.sac);
+  pulp.material.color.set(v.pulp);
+  seedMesh.material.color.set(v.seed);
   document.querySelectorAll('#variety button').forEach(b => b.classList.toggle('on', b.dataset.v === name));
-}
-
-/* ---------- build / switch model ---------- */
-function buildModel(key) {
-  modelKey = key;
-  M = MODELS[key];
-  R = M.R; DEPTH = M.DEPTH; WALL = M.WALL; RI = R - WALL; RP = RI - 0.004;
-  REST_Y = DEPTH * R; SQUISH = M.squish;
-
-  if (shell) { fruit.remove(shell); shell.geometry.dispose(); }
-  shell = new THREE.Mesh(buildShell(), shellMat);
-  shell.castShadow = true;
-  fruit.add(shell);
-  Object.assign(shellMat, { roughness: M.shellMat.roughness, clearcoat: M.shellMat.clearcoat, clearcoatRoughness: M.shellMat.cr });
-
-  layoutPulp();
-  pulpPos.array.set(rest);
-  pulpPos.needsUpdate = true;
-  pulpGeo.computeVertexNormals();
-  const P = M.pulpMat;
-  sac.repeat.set(P.repeat, P.repeat);
-  Object.assign(pulpMat, { roughness: P.roughness, clearcoat: P.clearcoat, clearcoatRoughness: P.cr,
-    map: P.map ? sac : null, bumpMap: P.bump ? sac : null, bumpScale: P.bump });
-  pulpMat.needsUpdate = true;
-
-  buildDecor();
-
-  document.getElementById('ttl').innerHTML = M.title;
-  document.getElementById('blurb').textContent = M.blurb;
-  const vbox = document.getElementById('variety');
-  vbox.replaceChildren();
-  for (const name of Object.keys(M.varieties)) {
-    const b = document.createElement('button');
-    b.textContent = name; b.dataset.v = name;
-    b.onclick = () => applyVariety(name);
-    vbox.appendChild(b);
-  }
-  document.querySelectorAll('#models button').forEach(b => b.classList.toggle('on', b.dataset.m === key));
-  applyVariety(Object.keys(M.varieties)[0]);
-
-  firm.value = M.k; damp.value = M.c; sync();
-  resetBody();
 }
 
 /* ---------- rigid body (position + tilt) ---------- */
 const body = { y: 2.8, vy: 0, x: 0, vx: 0, z: 0, vz: 0, tx: 0, tz: 0, wx: 0, wz: 0, yaw: 0.5 };
 const prevV = new THREE.Vector3();
 const qInv = new THREE.Quaternion(), F = new THREE.Vector3();
+const SQUISH = 0.3;   // how strongly body acceleration is felt by the pulp
 
 function resetBody() {
-  Object.assign(body, { y: REST_Y + 1.9, vy: 0, x: 0, vx: 0, z: 0, vz: 0, tx: 0, tz: 0, wx: 0, wz: 0 });
+  Object.assign(body, { y: 2.8, vy: 0, x: 0, vx: 0, z: 0, vz: 0, tx: 0, tz: 0, wx: 0, wz: 0 });
   prevV.set(0, 0, 0);
   dsp.fill(0); vel.fill(0);
 }
@@ -511,7 +389,7 @@ function stepBody(dt) {
   body.wx += (-70 * body.tx - 4.5 * body.wx) * dt;
   body.wz += (-70 * body.tz - 4.5 * body.wz) * dt;
   body.tx += body.wx * dt; body.tz += body.wz * dt;
-  // pseudo-force felt by the filling: gravity minus the shell's own acceleration
+  // pseudo-force felt by the jelly (gravity minus the body's own acceleration)
   F.set(-(body.vx - prevV.x) / dt, -G - (body.vy - prevV.y) / dt, -(body.vz - prevV.z) / dt);
   prevV.set(body.vx, body.vy, body.vz);
   F.multiplyScalar(SQUISH);
@@ -550,7 +428,7 @@ function pushGeometry() {
   for (let i = 0; i < p.length; i++) p[i] = rest[i] + dsp[i];
   pulpPos.needsUpdate = true;
   pulpGeo.computeVertexNormals();
-  updateDecor();
+  updateSeeds();
 }
 
 /* ---------- interaction ---------- */
@@ -572,40 +450,41 @@ renderer.domElement.addEventListener('pointerup', e => {
   const hit = ray.intersectObjects([pulp, shell], false)[0];
   if (!hit) return;
   _local.copy(hit.point); fruit.worldToLocal(_local);
-  for (let i = 0; i < nV; i++) {      // poke: push the filling down around the hit point
+  // poke: push the pulp down around the hit point
+  for (let i = 0; i < nV; i++) {
     if (ringOf[i] === NR) continue;
     const dx = rest[i * 3] - _local.x, dz = rest[i * 3 + 2] - _local.z;
     vel[i * 3 + 1] -= 2.2 * Math.exp(-(dx * dx + dz * dz) / 0.05);
   }
-  body.vy += 0.9;                      // and tip the whole thing away from the finger
+  // and tip the whole fruit away from the finger
+  body.vy += 0.9;
   body.wz += _local.x * 3.5; body.wx -= _local.z * 3.5;
 });
 
 /* ---------- UI ---------- */
+const vbox = document.getElementById('variety');
+for (const name of Object.keys(VARIETIES)) {
+  const b = document.createElement('button');
+  b.textContent = name; b.dataset.v = name;
+  b.onclick = () => setVariety(name);
+  vbox.appendChild(b);
+}
 const firm = document.getElementById('firm'), damp = document.getElementById('damp');
 const kv = document.getElementById('kv'), cv = document.getElementById('cv');
-function sync() { params.k = +firm.value; params.c = +damp.value; kv.textContent = firm.value; cv.textContent = (+damp.value).toFixed(1); }
-firm.oninput = damp.oninput = sync;
-const mbox = document.getElementById('models');
-for (const [key, m] of Object.entries(MODELS)) {
-  const b = document.createElement('button');
-  b.textContent = m.label.split(' ')[0]; b.dataset.m = key;
-  b.onclick = () => buildModel(key);
-  mbox.appendChild(b);
-}
+const sync = () => { params.k = +firm.value; params.c = +damp.value; kv.textContent = firm.value; cv.textContent = (+damp.value).toFixed(1); };
+firm.oninput = damp.oninput = sync; sync();
 document.getElementById('nudge').onclick = nudge;
 document.getElementById('reset').onclick = resetBody;
 document.getElementById('mesh').onchange = e => { wire.visible = e.target.checked; };
 document.getElementById('pause').onchange = e => { params.paused = e.target.checked; };
-
 function layout() {
   const narrow = innerWidth < 720;
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   if (narrow !== layout.narrow) {
     layout.narrow = narrow;
-    camera.position.set(0, narrow ? 2.6 : 2.3, narrow ? 9.2 : 5.4);
-    controls.target.set(0, narrow ? -0.45 : 0.55, 0);
+    camera.position.set(0, narrow ? 2.6 : 2.3, narrow ? 9.2 : 5.2);
+    controls.target.set(0, narrow ? -0.35 : 0.55, 0);
   }
 }
 addEventListener('resize', layout);
@@ -633,11 +512,10 @@ function tick(now) {
   renderer.render(scene, camera);
 }
 
-const start = location.hash.slice(1);
-buildModel(MODELS[start] ? start : 'passion');
+setVariety('Purple');
 stepBody(1 / 120); pushGeometry();
 requestAnimationFrame(tick);
-window.__jelly = { body, params, nudge, resetBody, buildModel };
+window.__jelly = { body, params, nudge, resetBody };
 </script>
 </body>
 </html>
