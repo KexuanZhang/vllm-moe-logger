@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Passion Fruit — soft-body study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;1,400;1,500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ebe8e1;
+    --ink: #2a2320;
+    --mute: #7c726a;
+    --line: rgba(42, 35, 32, .14);
+    --accent: #3b1233;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif; font-size: 13px; }
+  canvas { position: fixed; inset: 0; display: block; touch-action: none; z-index: 0; }
+  .title { z-index: 1; position: fixed; left: 40px; top: 36px; pointer-events: none; max-width: 340px; }
+  .title small { letter-spacing: .14em; text-transform: uppercase; font-size: 10px; color: var(--mute); }
+  .title h1 { font: italic 400 64px/0.95 'Cormorant Garamond', Georgia, serif; margin: 14px 0 12px; }
+  .title p { margin: 0; color: var(--mute); line-height: 1.55; }
+  .panel { z-index: 2; position: fixed; right: 28px; top: 28px; width: 232px; padding: 16px; border: 1px solid var(--line);
+    border-radius: 10px; background: rgba(255, 255, 255, .55); backdrop-filter: blur(10px); }
+  .panel h2 { margin: 0 0 10px; font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+  .seg { display: flex; gap: 6px; margin-bottom: 16px; }
+  .seg button { flex: 1; padding: 7px 0; border: 1px solid var(--line); border-radius: 6px; background: transparent;
+    font: inherit; color: var(--ink); cursor: pointer; }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  label.row { display: flex; justify-content: space-between; margin: 12px 0 4px; }
+  label.row span:last-child { color: var(--mute); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .actions { display: flex; gap: 6px; margin-top: 16px; }
+  .actions button { flex: 1; padding: 9px 0; border-radius: 6px; border: 1px solid var(--accent); font: inherit; cursor: pointer; }
+  .actions .primary { background: var(--accent); color: #fff; flex: 2; }
+  .actions .ghost { background: transparent; color: var(--accent); }
+  .checks { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; color: var(--mute); }
+  .checks label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .checks input { accent-color: var(--accent); }
+  .readout { z-index: 1; position: fixed; left: 40px; bottom: 32px; pointer-events: none; color: var(--mute); line-height: 1.6; }
+  .readout b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  @media (max-width: 720px) {
+    .title { left: 20px; top: 20px; }
+    .title h1 { font-size: 44px; }
+    .title p { display: none; }
+    .panel { right: 12px; left: 12px; top: auto; bottom: 12px; width: auto; }
+    .readout { display: none; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="title">
+  <small>Material studies · soft body</small>
+  <h1>Passion<br>Fruit.</h1>
+  <p>A mass-spring jelly in three.js, no physics engine. Drag to orbit, click the pulp to poke it, or give it a nudge.</p>
+</div>
+
+<div class="panel">
+  <h2>Variety</h2>
+  <div class="seg" id="variety"></div>
+  <label class="row"><span>Firmness</span><span id="kv"></span></label>
+  <input id="firm" type="range" min="60" max="500" step="1" value="220">
+  <label class="row"><span>Internal damping</span><span id="cv"></span></label>
+  <input id="damp" type="range" min="0.6" max="10" step="0.1" value="2.5">
+  <div class="actions">
+    <button class="primary" id="nudge">Give it a nudge</button>
+    <button class="ghost" id="reset">Reset</button>
+  </div>
+  <div class="checks">
+    <label><input type="checkbox" id="mesh"> Show mesh</label>
+    <label><input type="checkbox" id="pause"> Pause</label>
+  </div>
+</div>
+
+<div class="readout">
+  Wobble <b id="wob">0.000</b><br>
+  Height <b id="hgt">0.00</b>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ---------- geometry constants ---------- */
+const R = 1, DEPTH = 0.9, WALL = 0.14;
+const RI = R - WALL;          // cavity radius
+const RP = RI - 0.004;        // pulp radius
+const REST_Y = DEPTH * R;     // group origin height when resting on the ground
+const NR = 28, NS = 64;       // pulp grid: rings x segments
+const G = 9.8;
+
+const VARIETIES = {
+  Purple: { shell: '#5a2250', pith: '#f1e6cf', pulp: '#f2a31c', seed: '#241710' },
+  Golden: { shell: '#e2b52a', pith: '#f7efd6', pulp: '#f7c04a', seed: '#2b1d12' },
+  Sweet:  { shell: '#e57f1f', pith: '#f4ead2', pulp: '#d9d3b4', seed: '#2a2a22' },
+};
+
+const params = { k: 220, c: 2.5, paused: false };
+
+/* ---------- noise ---------- */
+function hash(x, y, z) {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+const fade = t => t * t * (3 - 2 * t);
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const fx = fade(x - xi), fy = fade(y - yi), fz = fade(z - zi);
+  const l = (a, b, t) => a + (b - a) * t;
+  return l(
+    l(l(hash(xi, yi, zi), hash(xi + 1, yi, zi), fx), l(hash(xi, yi + 1, zi), hash(xi + 1, yi + 1, zi), fx), fy),
+    l(l(hash(xi, yi, zi + 1), hash(xi + 1, yi, zi + 1), fx), l(hash(xi, yi + 1, zi + 1), hash(xi + 1, yi + 1, zi + 1), fx), fy),
+    fz);
+}
+const fbm = (x, y, z) => noise3(x, y, z) * .6 + noise3(x * 2.3, y * 2.3, z * 2.3) * .3 + noise3(x * 5.1, y * 5.1, z * 5.1) * .1;
+
+/* ---------- renderer / scene ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#ebe8e1');
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.7;
+
+const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.1, 50);
+camera.position.set(0, 2.3, 5.2);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.55, 0);
+controls.enableDamping = true;
+controls.enablePan = false;
+controls.minDistance = 2.6;
+controls.maxDistance = 9;
+controls.maxPolarAngle = Math.PI * 0.49;
+
+const sun = new THREE.DirectionalLight('#fff4e6', 2.2);
+sun.position.set(-2.6, 5.5, 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.radius = 9;
+sun.shadow.blurSamples = 20;
+sun.shadow.bias = -0.0004;
+Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 14 });
+scene.add(sun);
+scene.add(new THREE.HemisphereLight('#ffffff', '#cfc8bb', 0.5));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.2 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ---------- shell (lathe, vertex-coloured) ---------- */
+const fruit = new THREE.Group();
+scene.add(fruit);
+
+const shellVar = [];       // per-vertex colour variation
+let shellGeo, shellIsOuter;
+{
+  const pts = [], N = 40;
+  for (let i = 0; i <= N; i++) {
+    const a = i / N * Math.PI / 2;
+    pts.push(new THREE.Vector2(Math.max(R * Math.sin(a), 1e-4), -DEPTH * R * Math.cos(a)));
+  }
+  const nOuter = pts.length;
+  pts.push(new THREE.Vector2(R - 0.03, 0.014), new THREE.Vector2(RI + 0.03, 0.014));
+  for (let i = N; i >= 0; i--) {
+    const a = i / N * Math.PI / 2;
+    pts.push(new THREE.Vector2(Math.max(RI * Math.sin(a), 1e-4), -DEPTH * RI * Math.cos(a)));
+  }
+  const SEG = 96, np = pts.length;
+  shellGeo = new THREE.LatheGeometry(pts, SEG);
+  const pos = shellGeo.attributes.position;
+  shellIsOuter = new Uint8Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    const outer = (i % np) < nOuter;
+    shellIsOuter[i] = outer ? 1 : 0;
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const n = fbm(x * 3.2 + 7, y * 3.2, z * 3.2);
+    shellVar.push(0.82 + 0.36 * fbm(x * 1.6, y * 1.6 + 3, z * 1.6));
+    if (outer) {
+      const len = Math.hypot(x, y + 0.1, z) || 1;
+      const d = 0.035 * (n - 0.5) + 0.012 * Math.sin(y * 40) * (noise3(x * 6, y * 6, z * 6) - 0.4);
+      pos.setXYZ(i, x + x / len * d, y + (y + 0.1) / len * d, z + z / len * d);
+    }
+  }
+  shellGeo.computeVertexNormals();
+  // weld normals across the lathe seam
+  const nrm = shellGeo.attributes.normal;
+  for (let j = 0; j < np; j++) {
+    const a = j, b = SEG * np + j;
+    const nx = nrm.getX(a) + nrm.getX(b), ny = nrm.getY(a) + nrm.getY(b), nz = nrm.getZ(a) + nrm.getZ(b);
+    const l = Math.hypot(nx, ny, nz) || 1;
+    nrm.setXYZ(a, nx / l, ny / l, nz / l);
+    nrm.setXYZ(b, nx / l, ny / l, nz / l);
+  }
+  shellGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3));
+}
+const shell = new THREE.Mesh(shellGeo, new THREE.MeshPhysicalMaterial({
+  vertexColors: true, roughness: 0.36, clearcoat: 0.7, clearcoatRoughness: 0.4, side: THREE.DoubleSide,
+}));
+shell.castShadow = true;
+fruit.add(shell);
+
+/* ---------- pulp: soft body ---------- */
+const nV = 1 + NR * NS;
+const rest = new Float32Array(nV * 3);
+const dsp = new Float32Array(nV * 3);   // displacement
+const vel = new Float32Array(nV * 3);
+const acc = new Float32Array(nV * 3);
+const ringOf = new Uint8Array(nV);
+const uv = new Float32Array(nV * 2);
+const pulpY = r => -0.03 + 0.11 * (1 - (r / RP) ** 2);
+const vid = (j, k) => j === 0 ? 0 : 1 + (j - 1) * NS + ((k % NS) + NS) % NS;
+
+rest.set([0, pulpY(0), 0], 0);
+uv.set([.5, .5], 0);
+for (let j = 1; j <= NR; j++) {
+  const r = RP * j / NR;
+  for (let k = 0; k < NS; k++) {
+    const i = vid(j, k), th = k / NS * Math.PI * 2;
+    rest.set([r * Math.cos(th), pulpY(r), r * Math.sin(th)], i * 3);
+    uv.set([.5 + .5 * r / RP * Math.cos(th), .5 + .5 * r / RP * Math.sin(th)], i * 2);
+    ringOf[i] = j;
+  }
+}
+const index = [];
+for (let k = 0; k < NS; k++) index.push(0, vid(1, k + 1), vid(1, k));
+for (let j = 1; j < NR; j++) for (let k = 0; k < NS; k++) {
+  const a0 = vid(j, k), a1 = vid(j, k + 1), b0 = vid(j + 1, k), b1 = vid(j + 1, k + 1);
+  index.push(a0, a1, b0, a1, b1, b0);
+}
+// neighbour lists
+const nbStart = new Uint32Array(nV + 1), nbFlat = [];
+for (let i = 0; i < nV; i++) {
+  nbStart[i] = nbFlat.length;
+  if (i === 0) { for (let k = 0; k < NS; k++) nbFlat.push(vid(1, k)); continue; }
+  const j = ringOf[i], k = (i - 1) % NS;
+  nbFlat.push(vid(j, k - 1), vid(j, k + 1), j > 1 ? vid(j - 1, k) : 0);
+  if (j < NR) nbFlat.push(vid(j + 1, k));
+}
+nbStart[nV] = nbFlat.length;
+const nbrs = Uint32Array.from(nbFlat);
+
+const pulpGeo = new THREE.BufferGeometry();
+const pulpPos = new THREE.BufferAttribute(new Float32Array(rest), 3);
+pulpPos.setUsage(THREE.DynamicDrawUsage);
+pulpGeo.setAttribute('position', pulpPos);
+pulpGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+pulpGeo.setIndex(index);
+pulpGeo.computeVertexNormals();
+
+function sacTexture() {
+  const s = 512, cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#b4b4b4'; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 1800; i++) {
+    const x = Math.random() * s, y = Math.random() * s, r = 5 + Math.random() * 10;
+    const l = 150 + (Math.random() * 105 | 0);
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgb(${l},${l},${l})`); gr.addColorStop(1, 'rgba(120,120,120,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.repeat.set(2, 2);
+  t.anisotropy = 4;
+  return t;
+}
+const sac = sacTexture();
+const pulp = new THREE.Mesh(pulpGeo, new THREE.MeshPhysicalMaterial({
+  color: '#f2a31c', map: sac, bumpMap: sac, bumpScale: 3, roughness: 0.14,
+  clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide,
+}));
+pulp.castShadow = true;
+fruit.add(pulp);
+
+const wire = new THREE.Mesh(pulpGeo, new THREE.MeshBasicMaterial({
+  color: '#1d120f', wireframe: true, transparent: true, opacity: 0.45,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+}));
+wire.visible = false;
+fruit.add(wire);
+
+/* ---------- seeds, riding on the jelly ---------- */
+const SEEDS = 190;
+const seedMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 9),
+  new THREE.MeshPhysicalMaterial({ color: '#241710', roughness: 0.5, clearcoat: 0.2 }), SEEDS);
+fruit.add(seedMesh);
+const seeds = [];
+{
+  const placed = [];
+  let tries = 0;
+  while (placed.length < SEEDS && tries++ < 20000) {
+    const r = RP * 0.94 * Math.sqrt(Math.random()), th = Math.random() * Math.PI * 2;
+    const x = r * Math.cos(th), z = r * Math.sin(th);
+    if (placed.some(p => (p[0] - x) ** 2 + (p[1] - z) ** 2 < 0.0036)) continue;
+    placed.push([x, z]);
+  }
+  for (const [x, z] of placed) {
+    const y = pulpY(Math.hypot(x, z)) + 0.012;
+    let best = 1, bd = 1e9;
+    for (let i = 1; i < nV; i++) {
+      const d = (rest[i * 3] - x) ** 2 + (rest[i * 3 + 2] - z) ** 2;
+      if (d < bd) { bd = d; best = i; }
+    }
+    seeds.push({ x, y, z, vi: best, q: new THREE.Quaternion().setFromEuler(
+      new THREE.Euler((Math.random() - .5) * .3, Math.random() * Math.PI * 2, (Math.random() - .5) * .3)),
+      s: new THREE.Vector3(0.03, 0.009, 0.018).multiplyScalar(0.8 + Math.random() * 0.5) });
+  }
+}
+const _m = new THREE.Matrix4(), _p = new THREE.Vector3();
+function updateSeeds() {
+  for (let i = 0; i < seeds.length; i++) {
+    const s = seeds[i], o = s.vi * 3;
+    _p.set(s.x + dsp[o], s.y + dsp[o + 1], s.z + dsp[o + 2]);
+    _m.compose(_p, s.q, s.s);
+    seedMesh.setMatrixAt(i, _m);
+  }
+  seedMesh.instanceMatrix.needsUpdate = true;
+}
+
+/* ---------- variety ---------- */
+const _c = new THREE.Color(), _c2 = new THREE.Color();
+function setVariety(name) {
+  const v = VARIETIES[name];
+  const col = shellGeo.attributes.color;
+  _c.set(v.shell); _c2.set(v.pith);
+  for (let i = 0; i < col.count; i++) {
+    const t = shellIsOuter[i] ? shellVar[i] : 1;
+    const src = shellIsOuter[i] ? _c : _c2;
+    col.setXYZ(i, src.r * t, src.g * t, src.b * t);
+  }
+  col.needsUpdate = true;
+  pulp.material.color.set(v.pulp);
+  seedMesh.material.color.set(v.seed);
+  document.querySelectorAll('#variety button').forEach(b => b.classList.toggle('on', b.dataset.v === name));
+}
+
+/* ---------- rigid body (position + tilt) ---------- */
+const body = { y: 2.8, vy: 0, x: 0, vx: 0, z: 0, vz: 0, tx: 0, tz: 0, wx: 0, wz: 0, yaw: 0.5 };
+const prevV = new THREE.Vector3();
+const qInv = new THREE.Quaternion(), F = new THREE.Vector3();
+const SQUISH = 0.3;   // how strongly body acceleration is felt by the pulp
+
+function resetBody() {
+  Object.assign(body, { y: 2.8, vy: 0, x: 0, vx: 0, z: 0, vz: 0, tx: 0, tz: 0, wx: 0, wz: 0 });
+  prevV.set(0, 0, 0);
+  dsp.fill(0); vel.fill(0);
+}
+
+function stepBody(dt) {
+  body.vy -= G * dt;
+  body.y += body.vy * dt;
+  if (body.y < REST_Y) {
+    body.y = REST_Y;
+    body.vy = body.vy < -0.6 ? -body.vy * 0.4 : 0;
+  }
+  const onGround = body.y <= REST_Y + 1e-4;
+  const fr = onGround ? 2.2 : 0.2;
+  body.vx += (-4 * body.x - fr * body.vx) * dt;
+  body.vz += (-4 * body.z - fr * body.vz) * dt;
+  body.x += body.vx * dt; body.z += body.vz * dt;
+  body.wx += (-70 * body.tx - 4.5 * body.wx) * dt;
+  body.wz += (-70 * body.tz - 4.5 * body.wz) * dt;
+  body.tx += body.wx * dt; body.tz += body.wz * dt;
+  // pseudo-force felt by the jelly (gravity minus the body's own acceleration)
+  F.set(-(body.vx - prevV.x) / dt, -G - (body.vy - prevV.y) / dt, -(body.vz - prevV.z) / dt);
+  prevV.set(body.vx, body.vy, body.vz);
+  F.multiplyScalar(SQUISH);
+  fruit.position.set(body.x, body.y, body.z);
+  fruit.rotation.set(body.tx, body.yaw, body.tz, 'YXZ');
+  fruit.updateMatrixWorld();
+  qInv.copy(fruit.quaternion).invert();
+  F.applyQuaternion(qInv);
+}
+
+function stepJelly(dt) {
+  const k = params.k, c = params.c, kn = k * 6;
+  for (let i = 0; i < nV; i++) {
+    if (ringOf[i] === NR) continue;
+    const o = i * 3, a = nbStart[i], b = nbStart[i + 1], cnt = b - a;
+    let sx = 0, sy = 0, sz = 0;
+    for (let n = a; n < b; n++) { const q = nbrs[n] * 3; sx += dsp[q]; sy += dsp[q + 1]; sz += dsp[q + 2]; }
+    sx /= cnt; sy /= cnt; sz /= cnt;
+    acc[o]     = -k * dsp[o]     - c * vel[o]     + kn * (sx - dsp[o])     + F.x;
+    acc[o + 1] = -k * dsp[o + 1] - c * vel[o + 1] + kn * (sy - dsp[o + 1]) + F.y;
+    acc[o + 2] = -k * dsp[o + 2] - c * vel[o + 2] + kn * (sz - dsp[o + 2]) + F.z;
+  }
+  for (let i = 0; i < nV; i++) {
+    if (ringOf[i] === NR) continue;
+    for (let a = 0; a < 3; a++) {
+      const o = i * 3 + a;
+      vel[o] += acc[o] * dt;
+      dsp[o] += vel[o] * dt;
+      if (dsp[o] > 0.3) { dsp[o] = 0.3; vel[o] = 0; } else if (dsp[o] < -0.3) { dsp[o] = -0.3; vel[o] = 0; }
+    }
+  }
+}
+
+function pushGeometry() {
+  const p = pulpPos.array;
+  for (let i = 0; i < p.length; i++) p[i] = rest[i] + dsp[i];
+  pulpPos.needsUpdate = true;
+  pulpGeo.computeVertexNormals();
+  updateSeeds();
+}
+
+/* ---------- interaction ---------- */
+function nudge() {
+  body.vy += 2.6 + Math.random() * 0.8;
+  body.vx += (Math.random() - .5) * 1.2;
+  body.vz += (Math.random() - .5) * 1.2;
+  body.wx += (Math.random() - .5) * 7;
+  body.wz += (Math.random() - .5) * 7;
+}
+
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), _local = new THREE.Vector3();
+let down = null;
+renderer.domElement.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5 || performance.now() - down.t > 450) return;
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects([pulp, shell], false)[0];
+  if (!hit) return;
+  _local.copy(hit.point); fruit.worldToLocal(_local);
+  // poke: push the pulp down around the hit point
+  for (let i = 0; i < nV; i++) {
+    if (ringOf[i] === NR) continue;
+    const dx = rest[i * 3] - _local.x, dz = rest[i * 3 + 2] - _local.z;
+    vel[i * 3 + 1] -= 2.2 * Math.exp(-(dx * dx + dz * dz) / 0.05);
+  }
+  // and tip the whole fruit away from the finger
+  body.vy += 0.9;
+  body.wz += _local.x * 3.5; body.wx -= _local.z * 3.5;
+});
+
+/* ---------- UI ---------- */
+const vbox = document.getElementById('variety');
+for (const name of Object.keys(VARIETIES)) {
+  const b = document.createElement('button');
+  b.textContent = name; b.dataset.v = name;
+  b.onclick = () => setVariety(name);
+  vbox.appendChild(b);
+}
+const firm = document.getElementById('firm'), damp = document.getElementById('damp');
+const kv = document.getElementById('kv'), cv = document.getElementById('cv');
+const sync = () => { params.k = +firm.value; params.c = +damp.value; kv.textContent = firm.value; cv.textContent = (+damp.value).toFixed(1); };
+firm.oninput = damp.oninput = sync; sync();
+document.getElementById('nudge').onclick = nudge;
+document.getElementById('reset').onclick = resetBody;
+document.getElementById('mesh').onchange = e => { wire.visible = e.target.checked; };
+document.getElementById('pause').onchange = e => { params.paused = e.target.checked; };
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ---------- loop ---------- */
+const wobEl = document.getElementById('wob'), hgtEl = document.getElementById('hgt');
+let last = performance.now(), frame = 0;
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min((now - last) / 1000, 1 / 30);
+  last = now;
+  if (!params.paused) {
+    const n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
+    for (let s = 0; s < n; s++) { stepBody(h); stepJelly(h); }
+    pushGeometry();
+  }
+  if (++frame % 6 === 0) {
+    let m = 0;
+    for (let i = 0; i < dsp.length; i += 3) m = Math.max(m, Math.abs(dsp[i + 1]));
+    wobEl.textContent = m.toFixed(3);
+    hgtEl.textContent = (body.y - REST_Y).toFixed(2);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+setVariety('Purple');
+stepBody(1 / 120); pushGeometry();
+requestAnimationFrame(tick);
+window.__jelly = { body, params, nudge, resetBody };
+</script>
+</body>
+</html>
